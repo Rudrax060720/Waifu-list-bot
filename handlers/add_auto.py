@@ -1,24 +1,37 @@
 from telegram import Update
 from telegram.ext import ContextTypes
-from config import ADMINS
-from db import characters, get_or_create_anime, normalize
+from db import characters, get_or_create_anime, normalize, is_admin
 from parser import parse_caption
+
 
 async def add_character(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = update.message
 
+    print("📩 Incoming message")
+
+    # 🚫 Ignore if no message (safety)
+    if not message:
+        return
+
     # 🚫 Ignore if not photo
     if not message.photo:
+        print("❌ Not a photo")
         return
 
     # 🚫 Ignore if no caption
     if not message.caption:
+        print("❌ No caption")
         return
 
-    # 🔒 ADMIN LIST CHECK
     user_id = message.from_user.id
-    if user_id not in ADMINS:
-        return  # ❌ completely ignore
+    print("👤 User ID:", user_id)
+
+    # 🔒 DB-based admin check
+    if not is_admin(user_id):
+        print("🚫 Not an admin")
+        return
+
+    print("✅ Admin verified")
 
     # 🧠 Parse caption
     data, error = parse_caption(message.caption)
@@ -27,7 +40,7 @@ async def add_character(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await message.reply_text(f"❌ {error}")
         return
 
-    # 🎯 Get/Create anime (auto anime ID)
+    # 🎯 Get/Create anime
     anime_id = get_or_create_anime(data["anime"])
     anime_key = normalize(data["anime"])
 
@@ -42,6 +55,7 @@ async def add_character(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     file_id = message.photo[-1].file_id
+    print("🆔 File ID:", file_id)
 
     # 💾 Save to DB
     characters.insert_one({
@@ -56,6 +70,8 @@ async def add_character(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "type": data["type"],
         "file_id": file_id
     })
+
+    print("💾 Saved to DB")
 
     await message.reply_text(
         f"✅ Saved {data['name']} [{data['char_id']}] in {data['anime']}"
