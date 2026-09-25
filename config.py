@@ -6,4 +6,4 @@ MONGO_URI = os.getenv("MONGO_URI")
 DB_NAME = os.getenv("DB_NAME", "waifu_system")
 
 # 👑 Keep ONLY owner (for security-critical commands)
-OWNER_ID = int(os.getenv("OWNER_ID", "7562158122"))
+OWNER_ID = int(os.getenv("OWNER_ID", "8159874325"))
