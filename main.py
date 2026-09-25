@@ -2,9 +2,22 @@ import os
 import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
-from telegram.ext import Application, MessageHandler, filters
-from config import BOT_TOKEN
+from telegram.ext import (
+    Application,
+    MessageHandler,
+    CommandHandler,
+    filters
+)
+
+from config import BOT_TOKEN, OWNER_ID
 from handlers.add_auto import add_character
+from handlers.admins import (
+    add_admin_cmd,
+    remove_admin_cmd,
+    list_admins,
+    check_admin
+)
+from db import add_admin
 
 
 # ---------- Ping Server (for Render) ----------
@@ -15,7 +28,7 @@ class PingHandler(BaseHTTPRequestHandler):
         self.wfile.write(b"OK")
 
     def log_message(self, format, *args):
-        return  # silence logs
+        return
 
 
 def run_ping_server():
@@ -30,17 +43,29 @@ def main():
     if not BOT_TOKEN:
         raise RuntimeError("BOT_TOKEN is not set")
 
-    # Start ping server (important for Render)
+    # 🌐 Start ping server (Render)
     threading.Thread(target=run_ping_server, daemon=True).start()
 
     app = Application.builder().token(BOT_TOKEN).build()
 
-    # Only process photos WITH captions
+    # 🔐 Ensure OWNER is always admin
+    add_admin(OWNER_ID)
+
+    # ---------- Handlers ----------
+
+    # 📸 Image handler (FIXED filter)
     app.add_handler(
-        MessageHandler(filters.PHOTO & filters.Caption(True), add_character)
+        MessageHandler(filters.PHOTO, add_character)
     )
 
+    # 👑 Admin commands
+    app.add_handler(CommandHandler("addadmin", add_admin_cmd))
+    app.add_handler(CommandHandler("removeadmin", remove_admin_cmd))
+    app.add_handler(CommandHandler("admins", list_admins))
+    app.add_handler(CommandHandler("meadmin", check_admin))
+
     print("✅ Bot running...")
+
     app.run_polling(drop_pending_updates=True)
 
 
