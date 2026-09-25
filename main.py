@@ -1,11 +1,41 @@
+import os
+import threading
+from http.server import BaseHTTPRequestHandler, HTTPServer
+
 from telegram.ext import Application, MessageHandler, filters
 from config import BOT_TOKEN
 from handlers.add_auto import add_character
 
+
+# ---------- Ping Server (for Render) ----------
+class PingHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b"OK")
+
+    def log_message(self, format, *args):
+        return  # silence logs
+
+
+def run_ping_server():
+    port = int(os.environ.get("PORT", 8080))
+    server = HTTPServer(("0.0.0.0", port), PingHandler)
+    print(f"🌐 Ping server running on port {port}")
+    server.serve_forever()
+
+
+# ---------- Main Bot ----------
 def main():
+    if not BOT_TOKEN:
+        raise RuntimeError("BOT_TOKEN is not set")
+
+    # Start ping server (important for Render)
+    threading.Thread(target=run_ping_server, daemon=True).start()
+
     app = Application.builder().token(BOT_TOKEN).build()
 
-    # Only process photos WITH captions (important)
+    # Only process photos WITH captions
     app.add_handler(
         MessageHandler(filters.PHOTO & filters.Caption(True), add_character)
     )
