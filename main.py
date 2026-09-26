@@ -11,7 +11,7 @@ from telegram.ext import (
 
 from config import BOT_TOKEN, OWNER_ID
 from handlers.add_auto import add_character
-from handlers.check import check_handler  # ✅ ADD THIS
+from from handlers.check import check_handler, pagination_handler ✅ ADD THIS
 from handlers.admins import (
     add_admin_cmd,
     remove_admin_cmd,
@@ -66,7 +66,8 @@ def main():
     app.add_handler(CommandHandler("addadmin", add_admin_cmd))
     app.add_handler(CommandHandler("removeadmin", remove_admin_cmd))
     app.add_handler(CommandHandler("admins", list_admins))
-    app.add_handler(CommandHandler("meadmin", check_admin))
+    app.add_handler(check_handler)
+    app.add_handler(pagination_handler)
 
     print("✅ Bot running...")
 
