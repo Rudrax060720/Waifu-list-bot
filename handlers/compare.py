@@ -220,7 +220,8 @@ async def process_list(update: Update, context: ContextTypes.DEFAULT_TYPE):
         text += f"{rarity_emoji} {key[0]} {event_display}\n"
 
     text += "\n📋 *Missing IDs (Global DB):*\n"
-    text += f"`{' '.join(sorted(set(id_list)))}"`
+    ids = " ".join(sorted(set(id_list)))
+    text += f"`{ids}`"
 
     await context.bot.send_message(
         chat_id=update.effective_chat.id,
