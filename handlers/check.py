@@ -10,7 +10,6 @@ from telegram.ext import (
 from db import get_characters_by_anime_and_type, normalize
 
 ASK_ANIME, ASK_TYPE = range(2)
-
 PAGE_SIZE = 10
 
 
@@ -25,38 +24,39 @@ RARITY_EMOJI = {
     "common": "🔵",
 }
 
+
 # ---------- EVENT MAP ----------
 EVENT_MAP = {
-    "👶": "𝑪𝒉𝒊𝒃𝒊",
-    "👥": "𝑫𝒖𝒐",
-    "🎮": "𝑮𝒂𝒎𝒆",
-    "🤝🏻": "𝑮𝒓𝒐𝒖𝒑",
-    "📙": "𝑴𝒂𝒏𝒈𝒂",
-    "⛰": "𝑨𝒅𝒗𝒆𝒏𝒕𝒖𝒓𝒆𝒓",
-    "🏀": "𝑩𝒂𝒔𝒌𝒆𝒕𝒃𝒂𝒍𝒍",
-    "🐰": "𝑩𝒖𝒏𝒏𝒚",
-    "🐎": "𝑪𝒐𝒘𝒃𝒐𝒚",
-    "🎄": "𝑪𝒉𝒓𝒊𝒔𝒕𝒎𝒂𝒔",
-    "🎃": "𝑯𝒂𝒍𝒍𝒐𝒘𝒆𝒆𝒏",
-    "👘": "𝑲𝒊𝒎𝒐𝒏𝒐",
-    "🧹": "𝑴𝒂𝒊𝒅",
-    "🎸": "𝑴𝒖𝒔𝒊𝒄𝒊𝒂𝒏",
-    "🚓": "𝑶𝒇𝒇𝒊𝒄𝒆𝒓",
-    "🎒": "𝑺𝒄𝒉𝒐𝒐𝒍",
-    "🏖": "𝑺𝒖𝒎𝒎𝒆𝒓",
-    "☃️": "𝑾𝒊𝒏𝒕𝒆𝒓",
-    "🎩": "𝑻𝒖𝒙𝒆𝒅𝒐",
-    "🏴‍☠️": "𝑷𝒊𝒓𝒂𝒕𝒆",
-    "🏁": "𝑹𝒂𝒄𝒆𝒓",
-    "🩺": "𝑫𝒐𝒄𝒕𝒐𝒓",
-    "⚽": "𝑺𝒐𝒄𝒄𝒆𝒓",
-    "💞": "𝑽𝒂𝒍𝒆𝒏𝒕𝒊𝒏𝒆",
-    "🪐": "𝑪𝒐𝒔𝒎𝒐𝒏𝒂𝒖𝒕",
-    "🀄️": "𝑨𝒃𝒃𝒆𝒔𝒔",
-    "💍": "𝑩𝒓𝒊𝒅𝒆",
-    "🎊": "𝑪𝒉𝒆𝒆𝒓𝒍𝒆𝒂𝒅𝒆𝒓𝒔",
-    "🥻": "𝑺𝒂𝒓𝒆𝒆",
-    "🎾": "𝑻𝒆𝒏𝒏𝒊𝒔",
+    "👶": "Chibi",
+    "👥": "Duo",
+    "🎮": "Game",
+    "🤝🏻": "Group",
+    "📙": "Manga",
+    "⛰": "Adventurer",
+    "🏀": "Basketball",
+    "🐰": "Bunny",
+    "🐎": "Cowboy",
+    "🎄": "Christmas",
+    "🎃": "Halloween",
+    "👘": "Kimono",
+    "🧹": "Maid",
+    "🎸": "Musician",
+    "🚓": "Officer",
+    "🎒": "School",
+    "🏖": "Summer",
+    "☃️": "Winter",
+    "🎩": "Tuxedo",
+    "🏴‍☠️": "Pirate",
+    "🏁": "Racer",
+    "🩺": "Doctor",
+    "⚽": "Soccer",
+    "💞": "Valentine",
+    "🪐": "Cosmonaut",
+    "🀄️": "Abbess",
+    "💍": "Bride",
+    "🎊": "Cheerleaders",
+    "🥻": "Saree",
+    "🎾": "Tennis",
 }
 
 
@@ -84,6 +84,22 @@ async def get_anime(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return ASK_TYPE
 
 
+# ---------- FORMAT CHARACTER ----------
+def format_character(char):
+    rarity_emoji = RARITY_EMOJI.get(char["rarity"], "⭐")
+
+    event_display = ""
+    if char.get("event"):
+        emoji = char["event"].strip("[]")
+        event_name = EVENT_MAP.get(emoji, "")
+        if event_name:
+            event_display = f" [{emoji} {event_name}]"
+        else:
+            event_display = f" [{emoji}]"
+
+    return f"{rarity_emoji} {char['char_id']}: {char['name']}{event_display}"
+
+
 # ---------- SHOW PAGE ----------
 async def show_page(query, context, page: int):
     anime = context.user_data.get("anime")
@@ -104,16 +120,9 @@ async def show_page(query, context, page: int):
     text += f"📄 Page {page+1} / {(total-1)//PAGE_SIZE + 1}\n\n"
 
     for char in page_data:
-        rarity_emoji = RARITY_EMOJI.get(char["rarity"], "⭐")
+        text += format_character(char) + "\n"
 
-        event_display = ""
-        if char.get("event"):
-            emoji = char["event"].strip("[]")
-            event_display = f" [{emoji}]"
-
-        text += f"{rarity_emoji} {char['char_id']}: {char['name']}{event_display}\n"
-
-    # ---------- Buttons ----------
+    # ---------- BUTTONS ----------
     buttons = []
 
     if page > 0:
@@ -135,11 +144,9 @@ async def get_type(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
 
-    type_ = query.data.split("_")[1]
-    context.user_data["type"] = type_
+    context.user_data["type"] = query.data.split("_")[1]
 
     await show_page(query, context, 0)
-
     return ConversationHandler.END
 
 
@@ -159,8 +166,7 @@ check_handler = ConversationHandler(
         ASK_ANIME: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_anime)],
         ASK_TYPE: [CallbackQueryHandler(get_type, pattern="^type_")],
     },
-    fallbacks=[],
-    per_message=True  # ✅ FIXED WARNING
+    fallbacks=[]
 )
 
 pagination_handler = CallbackQueryHandler(pagination, pattern="^page_")
