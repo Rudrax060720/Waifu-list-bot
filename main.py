@@ -2,6 +2,7 @@ import os
 import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
+from telegram import Update
 from telegram.ext import (
     Application,
     MessageHandler,
@@ -56,14 +57,14 @@ def main():
     add_admin(OWNER_ID)
 
     # ==============================
-    # 🔥 IMPORTANT: ORDER FIXED
+    # 🔥 HANDLER ORDER (IMPORTANT)
     # ==============================
 
     # 1️⃣ Conversation handlers (highest priority)
     app.add_handler(compare_handler)
     app.add_handler(check_handler)
 
-    # 2️⃣ CallbackQuery handlers that are NOT part of conversations
+    # 2️⃣ Callback query handlers (non-conversation)
     app.add_handler(pagination_handler)
 
     # 3️⃣ Admin commands
@@ -75,17 +76,15 @@ def main():
     # 4️⃣ Inline mode
     app.add_handler(InlineQueryHandler(inline_query))
 
-    # 5️⃣ Media handler LAST (important)
+    # 5️⃣ Media handler LAST
     app.add_handler(
         MessageHandler(filters.PHOTO & filters.CAPTION, add_character)
     )
 
     print("✅ Bot running...")
 
-    app.run_polling(
-        drop_pending_updates=True,
-        allowed_updates=Update.ALL_TYPES if hasattr(Update, "ALL_TYPES") else None
-    )
+    # 🚀 Safe run (no Update.ALL_TYPES needed)
+    app.run_polling(drop_pending_updates=True)
 
 
 if __name__ == "__main__":
