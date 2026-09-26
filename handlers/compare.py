@@ -31,8 +31,18 @@ RARITY_EMOJI = {v: k for k, v in RARITY_MAP.items()}
 def normalize_event(event: str):
     if not event:
         return ""
+
     match = re.search(r"\[(.*?)\]", event)
-    return match.group(1).strip() if match else event.strip()
+    if match:
+        val = match.group(1).strip()
+        return val if val else ""
+
+    event = event.strip().lower()
+
+    if event in ["none", "null", "-", ""]:
+        return ""
+
+    return event
 
 
 # ---------- START ----------
@@ -123,7 +133,7 @@ async def done_list(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return await process_list(update, context)
 
 
-# ---------- PARSER ----------
+# ---------- PARSER (FINAL FIXED) ----------
 def parse_user_line(line: str):
     try:
         if "➥" not in line:
@@ -134,22 +144,28 @@ def parse_user_line(line: str):
         rarity_emoji = parts[1].strip()
         name_part = parts[2].strip()
 
-        name = name_part.split("[")[0].strip()
+        # 🔥 remove [event]
+        name_clean = re.sub(r"\[.*?\]", "", name_part)
 
-        event = ""
-        if "[" in name_part and "]" in name_part:
-            event = normalize_event(name_part)
+        # 🔥 remove x<number>
+        name_clean = re.sub(r"x\d+", "", name_clean)
+
+        name = name_clean.strip()
+
+        # 🔥 normalize event
+        event = normalize_event(name_part)
 
         return (
             name.lower(),
             event,
             RARITY_MAP.get(rarity_emoji, "")
         )
+
     except:
         return None
 
 
-# ---------- PROCESS (LIVE RESULT BUILDING) ----------
+# ---------- PROCESS ----------
 async def process_list(update: Update, context: ContextTypes.DEFAULT_TYPE):
     anime = context.user_data["anime"]
     type_ = context.user_data["type"]
@@ -180,29 +196,36 @@ async def process_list(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     for c in db_chars:
         event = normalize_event(str(c.get("event", "")))
-        key = (c["name"].lower(), event, c["rarity"])
+
+        key = (
+            c["name"].lower(),
+            event,
+            c["rarity"]
+        )
+
         db_set.add(key)
         db_map[key] = c
 
     missing_from_user = sorted(db_set - user_set)
     not_in_db = sorted(user_set - db_set)
 
-    # ---------- LIVE BUILD ----------
+    # ---------- BUILD RESULT ----------
     text = f"📊 *{anime.title()} ({'Waifu' if type_=='w' else 'Husbando'})*\n\n"
     text += "❌ *Missing Characters:*\n"
 
     id_list = []
-    chunk_size = 5  # SAFE VALUE
+    chunk_size = 5
 
-    # 🔥 LIVE MISSING LIST
     for i, key in enumerate(missing_from_user, 1):
         char = db_map[key]
-        rarity_emoji = RARITY_EMOJI.get(char["rarity"], "⭐")
+
+        cid = char["char_id"]
+        name = char["name"]
         event = normalize_event(str(char.get("event", "")))
         event_display = f"[{event}]" if event else ""
 
-        text += f"{rarity_emoji} {char['name']} {event_display}\n"
-        id_list.append(str(char["char_id"]))
+        text += f"{cid} : {name} {event_display}\n"
+        id_list.append(str(cid))
 
         if i % chunk_size == 0 or i == len(missing_from_user):
             try:
@@ -218,24 +241,13 @@ async def process_list(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # ---------- NOT IN DB ----------
     text += "\n⚠️ *Not in Bot Database:*\n"
 
-    for i, key in enumerate(not_in_db, 1):
+    for key in not_in_db:
         rarity_emoji = RARITY_EMOJI.get(key[2], "⭐")
         event_display = f"[{key[1]}]" if key[1] else ""
 
         text += f"{rarity_emoji} {key[0]} {event_display}\n"
 
-        if i % chunk_size == 0 or i == len(not_in_db):
-            try:
-                await context.bot.edit_message_text(
-                    chat_id=chat_id,
-                    message_id=status_msg.message_id,
-                    text=text,
-                    parse_mode="Markdown"
-                )
-            except:
-                pass
-
-    # ---------- IDS ----------
+    # ---------- GLOBAL IDS ----------
     ids = " ".join(sorted(set(id_list)))
 
     text += "\n📋 *Missing IDs (Global DB):*\n"
@@ -272,4 +284,4 @@ compare_handler = ConversationHandler(
     fallbacks=[],
     per_chat=True,
     per_user=True,
-    )
+)
