@@ -11,7 +11,7 @@ from telegram.ext import (
 
 from config import BOT_TOKEN, OWNER_ID
 from handlers.add_auto import add_character
-from from handlers.check import check_handler, pagination_handler
+from handlers.check import check_handler, pagination_handler
 from handlers.admins import (
     add_admin_cmd,
     remove_admin_cmd,
@@ -19,7 +19,8 @@ from handlers.admins import (
     check_admin
 )
 from db import add_admin
-
+from telegram.ext import InlineQueryHandler
+from handlers.inline import inline_query
 
 # ---------- Ping Server (for Render) ----------
 class PingHandler(BaseHTTPRequestHandler):
@@ -68,7 +69,8 @@ def main():
     app.add_handler(CommandHandler("admins", list_admins))
     app.add_handler(check_handler)
     app.add_handler(pagination_handler)
-
+# 🔍 Inline search (WAIFU SEARCH SYSTEM)
+    app.add_handler(InlineQueryHandler(inline_query))
     print("✅ Bot running...")
 
     app.run_polling(drop_pending_updates=True)
