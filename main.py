@@ -13,6 +13,7 @@ from telegram.ext import (
 from config import BOT_TOKEN, OWNER_ID
 from handlers.add_auto import add_character
 from handlers.check import check_handler, pagination_handler
+from handlers.compare import compare_handler  # ✅ ADD THIS
 from handlers.admins import (
     add_admin_cmd,
     remove_admin_cmd,
@@ -46,7 +47,7 @@ def main():
     if not BOT_TOKEN:
         raise RuntimeError("BOT_TOKEN is not set")
 
-    # 🌐 Render keepalive server
+    # 🌐 Keepalive server (Render)
     threading.Thread(target=run_ping_server, daemon=True).start()
 
     app = Application.builder().token(BOT_TOKEN).build()
@@ -54,12 +55,13 @@ def main():
     # 🔐 ensure owner is admin
     add_admin(OWNER_ID)
 
-    # ---------- HANDLER ORDER (VERY IMPORTANT) ----------
+    # ---------- HANDLER ORDER ----------
 
-    # 1️⃣ Conversation FIRST (so it catches /check properly)
+    # 1️⃣ Conversation handlers FIRST
     app.add_handler(check_handler)
+    app.add_handler(compare_handler)  # ✅ ADD HERE
 
-    # 2️⃣ Pagination (callback queries)
+    # 2️⃣ Callback handlers
     app.add_handler(pagination_handler)
 
     # 3️⃣ Admin commands
@@ -71,7 +73,7 @@ def main():
     # 4️⃣ Inline mode
     app.add_handler(InlineQueryHandler(inline_query))
 
-    # 5️⃣ Photo handler LAST (so it doesn't override others)
+    # 5️⃣ Media handler LAST
     app.add_handler(
         MessageHandler(filters.PHOTO & filters.CAPTION, add_character)
     )
