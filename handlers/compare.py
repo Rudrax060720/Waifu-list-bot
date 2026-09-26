@@ -27,20 +27,20 @@ RARITY_MAP = {
 RARITY_EMOJI = {v: k for k, v in RARITY_MAP.items()}
 
 
-# ---------- EVENT NORMALIZER ----------
+# ---------- EVENT NORMALIZER (FIXED) ----------
 def normalize_event(event: str):
     if not event:
         return ""
 
+    event = event.strip()
+
+    # 🔥 FIX: normalize "None"
+    if event.lower() in ["none", "null", ""]:
+        return ""
+
     match = re.search(r"\[(.*?)\]", event)
     if match:
-        val = match.group(1).strip()
-        return val if val else ""
-
-    event = event.strip().lower()
-
-    if event in ["none", "null", "-", ""]:
-        return ""
+        return match.group(1).strip()
 
     return event
 
@@ -97,8 +97,8 @@ async def collect_list(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text
 
     lines = [l.strip() for l in text.split("\n") if l.strip()]
-
     context.user_data["raw_list"].extend(lines)
+
     context.user_data["count"] = len(context.user_data["raw_list"])
 
     msg_id = context.user_data.get("progress_msg_id")
@@ -128,12 +128,12 @@ async def done_list(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
 
-    await query.message.edit_text("⚙️ Comparing...\n\nBuilding result live...")
+    await query.message.edit_text("⚙️ Comparing data...\n📊 Please wait...")
 
     return await process_list(update, context)
 
 
-# ---------- PARSER (FINAL FIXED) ----------
+# ---------- PARSER ----------
 def parse_user_line(line: str):
     try:
         if "➥" not in line:
@@ -144,23 +144,17 @@ def parse_user_line(line: str):
         rarity_emoji = parts[1].strip()
         name_part = parts[2].strip()
 
-        # 🔥 remove [event]
-        name_clean = re.sub(r"\[.*?\]", "", name_part)
+        name = name_part.split("[")[0].replace("x", "").strip()
 
-        # 🔥 remove x<number>
-        name_clean = re.sub(r"x\d+", "", name_clean)
-
-        name = name_clean.strip()
-
-        # 🔥 normalize event
-        event = normalize_event(name_part)
+        event = ""
+        if "[" in name_part and "]" in name_part:
+            event = normalize_event(name_part)
 
         return (
-            name.lower(),
+            name.lower().strip(),
             event,
             RARITY_MAP.get(rarity_emoji, "")
         )
-
     except:
         return None
 
@@ -175,15 +169,19 @@ async def process_list(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     status_msg = await context.bot.send_message(
         chat_id=chat_id,
-        text="⚙️ Comparing...\n\nPreparing data..."
+        text="⚙️ Comparing...\n📊 Building results..."
     )
 
-    # ---------- USER SET ----------
+    # ---------- USER SET (FIXED) ----------
     user_set = set()
+
     for line in raw_lines:
         parsed = parse_user_line(line)
         if parsed:
-            user_set.add(parsed)
+            name, event, _ = parsed
+
+            key = (name.strip(), normalize_event(event))
+            user_set.add(key)
 
     # ---------- DB ----------
     db_chars = list(characters.find({
@@ -195,78 +193,57 @@ async def process_list(update: Update, context: ContextTypes.DEFAULT_TYPE):
     db_map = {}
 
     for c in db_chars:
+        name = c["name"].strip().lower()
         event = normalize_event(str(c.get("event", "")))
 
-        key = (
-            c["name"].lower(),
-            event,
-            c["rarity"]
-        )
+        key = (name, event)
 
         db_set.add(key)
         db_map[key] = c
 
-    missing_from_user = sorted(db_set - user_set)
-    not_in_db = sorted(user_set - db_set)
+    # ---------- COMPARE ----------
+    missing_from_user = db_set - user_set
+    not_in_db = user_set - db_set
 
-    # ---------- BUILD RESULT ----------
+    # ---------- FORMAT ----------
     text = f"📊 *{anime.title()} ({'Waifu' if type_=='w' else 'Husbando'})*\n\n"
+
     text += "❌ *Missing Characters:*\n"
-
     id_list = []
-    chunk_size = 5
 
-    for i, key in enumerate(missing_from_user, 1):
+    for key in sorted(missing_from_user):
         char = db_map[key]
 
-        cid = char["char_id"]
-        name = char["name"]
+        rarity_emoji = RARITY_EMOJI.get(char["rarity"], "⭐")
         event = normalize_event(str(char.get("event", "")))
-        event_display = f"[{event}]" if event else ""
+        event_display = f"{event}" if event else ""
 
-        text += f"{cid} : {name} {event_display}\n"
-        id_list.append(str(cid))
+        text += f"{char['char_id']} : {char['name']} {event_display}\n"
+        id_list.append(str(char["char_id"]))
 
-        if i % chunk_size == 0 or i == len(missing_from_user):
-            try:
-                await context.bot.edit_message_text(
-                    chat_id=chat_id,
-                    message_id=status_msg.message_id,
-                    text=text,
-                    parse_mode="Markdown"
-                )
-            except:
-                pass
-
-    # ---------- NOT IN DB ----------
     text += "\n⚠️ *Not in Bot Database:*\n"
 
-    for key in not_in_db:
-        rarity_emoji = RARITY_EMOJI.get(key[2], "⭐")
-        event_display = f"[{key[1]}]" if key[1] else ""
+    for key in sorted(not_in_db):
+        name, event = key
+        event_display = f"{event}" if event else ""
+        text += f"{name} {event_display}\n"
 
-        text += f"{rarity_emoji} {key[0]} {event_display}\n"
-
-    # ---------- GLOBAL IDS ----------
+    # ---------- IDS ----------
     ids = " ".join(sorted(set(id_list)))
 
-    text += "\n📋 *Missing IDs (Global DB):*\n"
-    text += f"`{ids}`"
+    if ids:
+        text += "\n📋 *Missing IDs (Global DB):*\n"
+        text += f"`{ids}`"
+    else:
+        text += "\n📋 *Missing IDs:* None 🎉"
 
     # ---------- FINAL ----------
-    try:
-        await context.bot.edit_message_text(
-            chat_id=chat_id,
-            message_id=status_msg.message_id,
-            text=text,
-            parse_mode="Markdown"
-        )
-    except:
-        await context.bot.send_message(
-            chat_id=chat_id,
-            text=text,
-            parse_mode="Markdown"
-        )
+    await context.bot.edit_message_text(
+        chat_id=chat_id,
+        message_id=status_msg.message_id,
+        text=text,
+        parse_mode="Markdown"
+    )
 
     return ConversationHandler.END
 
@@ -284,4 +261,4 @@ compare_handler = ConversationHandler(
     fallbacks=[],
     per_chat=True,
     per_user=True,
-)
+    )
