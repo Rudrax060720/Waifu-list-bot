@@ -82,7 +82,7 @@ async def select_type(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return WAITING_LIST
 
 
-# ---------- COLLECT LIST (FIXED MULTI-LINE SUPPORT) ----------
+# ---------- COLLECT LIST ----------
 async def collect_list(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text
 
@@ -118,7 +118,7 @@ async def done_list(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
 
-    await query.message.edit_text("⚙️ Comparing data...\n📊 Please wait...")
+    await query.message.edit_text("⚙️ Comparing...\n\nBuilding result live...")
 
     return await process_list(update, context)
 
@@ -149,7 +149,7 @@ def parse_user_line(line: str):
         return None
 
 
-# ---------- PROCESS (ROBUST FINAL VERSION) ----------
+# ---------- PROCESS (LIVE RESULT BUILDING) ----------
 async def process_list(update: Update, context: ContextTypes.DEFAULT_TYPE):
     anime = context.user_data["anime"]
     type_ = context.user_data["type"]
@@ -159,7 +159,7 @@ async def process_list(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     status_msg = await context.bot.send_message(
         chat_id=chat_id,
-        text="⚙️ Comparing...\n📊 Progress: 0%"
+        text="⚙️ Comparing...\n\nPreparing data..."
     )
 
     # ---------- USER SET ----------
@@ -178,37 +178,24 @@ async def process_list(update: Update, context: ContextTypes.DEFAULT_TYPE):
     db_set = set()
     db_map = {}
 
-    total = len(db_chars) or 1
-
-    for i, c in enumerate(db_chars, 1):
+    for c in db_chars:
         event = normalize_event(str(c.get("event", "")))
-
         key = (c["name"].lower(), event, c["rarity"])
-
         db_set.add(key)
         db_map[key] = c
 
-        if i % max(1, total // 10) == 0:
-            percent = int((i / total) * 100)
-            try:
-                await context.bot.edit_message_text(
-                    chat_id=chat_id,
-                    message_id=status_msg.message_id,
-                    text=f"⚙️ Comparing...\n📊 Progress: {percent}%"
-                )
-            except:
-                pass
+    missing_from_user = sorted(db_set - user_set)
+    not_in_db = sorted(user_set - db_set)
 
-    # ---------- RESULT ----------
-    missing_from_user = db_set - user_set
-    not_in_db = user_set - db_set
-
+    # ---------- LIVE BUILD ----------
     text = f"📊 *{anime.title()} ({'Waifu' if type_=='w' else 'Husbando'})*\n\n"
-
     text += "❌ *Missing Characters:*\n"
-    id_list = []
 
-    for key in sorted(missing_from_user):
+    id_list = []
+    chunk_size = 5  # SAFE VALUE
+
+    # 🔥 LIVE MISSING LIST
+    for i, key in enumerate(missing_from_user, 1):
         char = db_map[key]
         rarity_emoji = RARITY_EMOJI.get(char["rarity"], "⭐")
         event = normalize_event(str(char.get("event", "")))
@@ -217,19 +204,44 @@ async def process_list(update: Update, context: ContextTypes.DEFAULT_TYPE):
         text += f"{rarity_emoji} {char['name']} {event_display}\n"
         id_list.append(str(char["char_id"]))
 
+        if i % chunk_size == 0 or i == len(missing_from_user):
+            try:
+                await context.bot.edit_message_text(
+                    chat_id=chat_id,
+                    message_id=status_msg.message_id,
+                    text=text,
+                    parse_mode="Markdown"
+                )
+            except:
+                pass
+
+    # ---------- NOT IN DB ----------
     text += "\n⚠️ *Not in Bot Database:*\n"
 
-    for key in sorted(not_in_db):
+    for i, key in enumerate(not_in_db, 1):
         rarity_emoji = RARITY_EMOJI.get(key[2], "⭐")
         event_display = f"[{key[1]}]" if key[1] else ""
 
         text += f"{rarity_emoji} {key[0]} {event_display}\n"
 
+        if i % chunk_size == 0 or i == len(not_in_db):
+            try:
+                await context.bot.edit_message_text(
+                    chat_id=chat_id,
+                    message_id=status_msg.message_id,
+                    text=text,
+                    parse_mode="Markdown"
+                )
+            except:
+                pass
+
+    # ---------- IDS ----------
     ids = " ".join(sorted(set(id_list)))
+
     text += "\n📋 *Missing IDs (Global DB):*\n"
     text += f"`{ids}`"
 
-    # ---------- FINAL (IMPORTANT FIX) ----------
+    # ---------- FINAL ----------
     try:
         await context.bot.edit_message_text(
             chat_id=chat_id,
@@ -260,4 +272,4 @@ compare_handler = ConversationHandler(
     fallbacks=[],
     per_chat=True,
     per_user=True,
-)
+    )
