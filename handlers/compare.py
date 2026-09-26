@@ -73,16 +73,17 @@ async def select_type(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     context.user_data["type"] = type_
     context.user_data["raw_list"] = []
+    context.user_data["count"] = 0
+    context.user_data["progress_msg_id"] = None
 
-    keyboard = [
-        [InlineKeyboardButton("➕ Add more", callback_data="cmp_add")],
-        [InlineKeyboardButton("✅ Done", callback_data="cmp_done")]
-    ]
-
-    await query.edit_message_text(
-        "📥 Send your list now.\n\nPress ✅ Done when finished.",
-        reply_markup=InlineKeyboardMarkup(keyboard)
+    msg = await query.edit_message_text(
+        "📥 Send your list items one by one\n\n📊 Progress: 0 items added\n\n[✅ Done]",
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("✅ Done", callback_data="cmp_done")]
+        ])
     )
+
+    context.user_data["progress_msg_id"] = msg.message_id
 
     return WAITING_LIST
 
@@ -90,7 +91,32 @@ async def select_type(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ---------- COLLECT LIST ----------
 async def collect_list(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text
+
     context.user_data["raw_list"].append(text)
+    context.user_data["count"] += 1
+
+    count = context.user_data["count"]
+
+    chat_id = update.effective_chat.id
+    msg_id = context.user_data.get("progress_msg_id")
+
+    if msg_id:
+        try:
+            await context.bot.edit_message_text(
+                chat_id=chat_id,
+                message_id=msg_id,
+                text=(
+                    "📥 Send your list items one by one\n\n"
+                    f"📊 Progress: {count} items added\n\n"
+                    "[✅ Done]"
+                ),
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("✅ Done", callback_data="cmp_done")]
+                ])
+            )
+        except:
+            pass
+
     return WAITING_LIST
 
 
@@ -99,7 +125,11 @@ async def done_list(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
 
-    # convert callback update into message-style context
+    # 🔥 loading state
+    await query.message.edit_text(
+        "⚙️ Starting comparison...\n📊 Analyzing your list..."
+    )
+
     return await process_list(update, context)
 
 
@@ -190,7 +220,7 @@ async def process_list(update: Update, context: ContextTypes.DEFAULT_TYPE):
         text += f"{rarity_emoji} {key[0]} {event_display}\n"
 
     text += "\n📋 *Missing IDs (Global DB):*\n"
-    text += f"`{' '.join(sorted(set(id_list)))}`"
+    text += f"`{' '.join(sorted(set(id_list)))}"`
 
     await context.bot.send_message(
         chat_id=update.effective_chat.id,
@@ -214,4 +244,4 @@ compare_handler = ConversationHandler(
     fallbacks=[],
     per_chat=True,
     per_user=True,
-)
+    )
