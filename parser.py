@@ -1,6 +1,5 @@
 import re
 
-# 🔮 Rarity map
 RARITY_MAP = {
     "🔮": "limited",
     "🎐": "celestial",
@@ -11,9 +10,7 @@ RARITY_MAP = {
     "🔵": "common",
 }
 
-# 🎭 Combined Event Map (Waifu + Husbando)
 EVENT_MAP = {
-    # ---------- EXCLUSIVE ----------
     "👶": "chibi",
     "👥": "duo",
     "🎮": "game",
@@ -21,7 +18,6 @@ EVENT_MAP = {
     "📙": "manga/manhua/manhwa",
     "🤝": "trio",
 
-    # ---------- LIMITED ----------
     "⛰": "adventurer",
     "🏀": "basketball",
     "🐎": "cowboy",
@@ -36,7 +32,6 @@ EVENT_MAP = {
     "🏖": "summer",
     "☃️": "winter",
 
-    # ---------- CELESTIAL ----------
     "🎩": "tuxedo",
     "🏴‍☠️": "pirate",
     "🏁": "racer",
@@ -45,7 +40,6 @@ EVENT_MAP = {
     "💞": "valentine",
     "🪐": "cosmonaut",
 
-    # ---------- EXTRA ----------
     "🀄️": "abbess",
     "💍": "bride",
     "🎊": "cheerleader",
@@ -58,7 +52,7 @@ def parse_caption(text):
     try:
         lines = [l.strip() for l in text.split("\n") if l.strip()]
 
-        # ---------- TYPE ----------
+        # TYPE
         if "waifu" in lines[0].lower():
             ctype = "w"
         elif "husbando" in lines[0].lower():
@@ -66,10 +60,10 @@ def parse_caption(text):
         else:
             return None, "Invalid type"
 
-        # ---------- ANIME ----------
+        # ANIME
         anime = lines[1]
 
-        # ---------- ID + NAME ----------
+        # ID + NAME
         match = re.match(r"(\d+):\s*(.+)", lines[2])
         if not match:
             return None, "Invalid ID format"
@@ -77,11 +71,10 @@ def parse_caption(text):
         char_id = int(match.group(1))
         name_part = match.group(2)
 
-        # ---------- EVENT ----------
+        # EVENT
         event = None
         event_name = None
 
-        # 1. Detect [emoji]
         event_match = re.search(r"\[(.*?)\]", name_part)
 
         if event_match:
@@ -89,9 +82,7 @@ def parse_caption(text):
             event = emoji
             event_name = EVENT_MAP.get(emoji, "unknown")
             name_part = re.sub(r"\[.*?\]", "", name_part).strip()
-
         else:
-            # 2. fallback: detect emoji directly
             for emo, name_val in EVENT_MAP.items():
                 if emo in name_part:
                     event = emo
@@ -101,7 +92,7 @@ def parse_caption(text):
 
         name = name_part
 
-        # ---------- RARITY (emoji-based FIX) ----------
+        # RARITY
         rarity = None
         for emoji, value in RARITY_MAP.items():
             if emoji in text:
@@ -110,13 +101,6 @@ def parse_caption(text):
 
         if not rarity:
             return None, "Rarity not found"
-
-        # ---------- EVENT NAME (fallback from caption lines) ----------
-        if event and not event_name:
-            for line in lines:
-                if event in line and len(line) > 3:
-                    event_name = line
-                    break
 
         return {
             "type": ctype,
