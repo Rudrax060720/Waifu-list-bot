@@ -280,7 +280,8 @@ async def process_list(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
     text += "\n📋 *Missing IDs (Global DB):*\n"
-    text += f"`{' '.join(sorted(set(id_list)))}"`
+    ids = " ".join(sorted(set(id_list)))
+    text += f"`{ids}`"
 
     # FINAL RESULT
     await context.bot.send_message(
