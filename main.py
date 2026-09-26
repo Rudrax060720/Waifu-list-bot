@@ -7,6 +7,7 @@ from telegram.ext import (
     Application,
     MessageHandler,
     CommandHandler,
+    CallbackQueryHandler,
     filters,
     InlineQueryHandler
 )
@@ -57,14 +58,14 @@ def main():
     add_admin(OWNER_ID)
 
     # ==============================
-    # 🔥 HANDLER ORDER (IMPORTANT)
+    # 🔥 HANDLER ORDER (OPTIMIZED)
     # ==============================
 
     # 1️⃣ Conversation handlers (highest priority)
     app.add_handler(compare_handler)
     app.add_handler(check_handler)
 
-    # 2️⃣ Callback query handlers (non-conversation)
+    # 2️⃣ Callback handlers (IMPORTANT for Done button + pagination)
     app.add_handler(pagination_handler)
 
     # 3️⃣ Admin commands
@@ -76,14 +77,14 @@ def main():
     # 4️⃣ Inline mode
     app.add_handler(InlineQueryHandler(inline_query))
 
-    # 5️⃣ Media handler LAST
+    # 5️⃣ Media handler LAST (important)
     app.add_handler(
         MessageHandler(filters.PHOTO & filters.CAPTION, add_character)
     )
 
     print("✅ Bot running...")
 
-    # 🚀 Safe run (no Update.ALL_TYPES needed)
+    # 🚀 Safe polling
     app.run_polling(drop_pending_updates=True)
 
 
