@@ -11,7 +11,53 @@ from db import get_characters_by_anime_and_type, normalize
 
 ASK_ANIME, ASK_TYPE = range(2)
 
-PAGE_SIZE = 10  # characters per page
+PAGE_SIZE = 10
+
+
+# ---------- RARITY MAP ----------
+RARITY_EMOJI = {
+    "limited": "🔮",
+    "celestial": "🎐",
+    "exclusive": "💮",
+    "legendary": "🟡",
+    "rare": "🟠",
+    "medium": "🔴",
+    "common": "🔵",
+}
+
+# ---------- EVENT MAP ----------
+EVENT_MAP = {
+    "👶": "𝑪𝒉𝒊𝒃𝒊",
+    "👥": "𝑫𝒖𝒐",
+    "🎮": "𝑮𝒂𝒎𝒆",
+    "🤝🏻": "𝑮𝒓𝒐𝒖𝒑",
+    "📙": "𝑴𝒂𝒏𝒈𝒂",
+    "⛰": "𝑨𝒅𝒗𝒆𝒏𝒕𝒖𝒓𝒆𝒓",
+    "🏀": "𝑩𝒂𝒔𝒌𝒆𝒕𝒃𝒂𝒍𝒍",
+    "🐰": "𝑩𝒖𝒏𝒏𝒚",
+    "🐎": "𝑪𝒐𝒘𝒃𝒐𝒚",
+    "🎄": "𝑪𝒉𝒓𝒊𝒔𝒕𝒎𝒂𝒔",
+    "🎃": "𝑯𝒂𝒍𝒍𝒐𝒘𝒆𝒆𝒏",
+    "👘": "𝑲𝒊𝒎𝒐𝒏𝒐",
+    "🧹": "𝑴𝒂𝒊𝒅",
+    "🎸": "𝑴𝒖𝒔𝒊𝒄𝒊𝒂𝒏",
+    "🚓": "𝑶𝒇𝒇𝒊𝒄𝒆𝒓",
+    "🎒": "𝑺𝒄𝒉𝒐𝒐𝒍",
+    "🏖": "𝑺𝒖𝒎𝒎𝒆𝒓",
+    "☃️": "𝑾𝒊𝒏𝒕𝒆𝒓",
+    "🎩": "𝑻𝒖𝒙𝒆𝒅𝒐",
+    "🏴‍☠️": "𝑷𝒊𝒓𝒂𝒕𝒆",
+    "🏁": "𝑹𝒂𝒄𝒆𝒓",
+    "🩺": "𝑫𝒐𝒄𝒕𝒐𝒓",
+    "⚽": "𝑺𝒐𝒄𝒄𝒆𝒓",
+    "💞": "𝑽𝒂𝒍𝒆𝒏𝒕𝒊𝒏𝒆",
+    "🪐": "𝑪𝒐𝒔𝒎𝒐𝒏𝒂𝒖𝒕",
+    "🀄️": "𝑨𝒃𝒃𝒆𝒔𝒔",
+    "💍": "𝑩𝒓𝒊𝒅𝒆",
+    "🎊": "𝑪𝒉𝒆𝒆𝒓𝒍𝒆𝒂𝒅𝒆𝒓𝒔",
+    "🥻": "𝑺𝒂𝒓𝒆𝒆",
+    "🎾": "𝑻𝒆𝒏𝒏𝒊𝒔",
+}
 
 
 # ---------- START ----------
@@ -54,11 +100,18 @@ async def show_page(query, context, page: int):
     end = start + PAGE_SIZE
     page_data = results[start:end]
 
-    text = f"📚 {anime.title()} ({type_})\n"
+    text = f"📚 {anime.title()} ({'Waifu' if type_=='w' else 'Husbando'})\n"
     text += f"📄 Page {page+1} / {(total-1)//PAGE_SIZE + 1}\n\n"
 
     for char in page_data:
-        text += f"• {char['char_id']}: {char['name']} ({char['rarity']})\n"
+        rarity_emoji = RARITY_EMOJI.get(char["rarity"], "⭐")
+
+        event_display = ""
+        if char.get("event"):
+            emoji = char["event"].strip("[]")
+            event_display = f" [{emoji}]"
+
+        text += f"{rarity_emoji} {char['char_id']}: {char['name']}{event_display}\n"
 
     # ---------- Buttons ----------
     buttons = []
@@ -96,7 +149,6 @@ async def pagination(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
 
     page = int(query.data.split("_")[1])
-
     await show_page(query, context, page)
 
 
@@ -107,8 +159,8 @@ check_handler = ConversationHandler(
         ASK_ANIME: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_anime)],
         ASK_TYPE: [CallbackQueryHandler(get_type, pattern="^type_")],
     },
-    fallbacks=[]
+    fallbacks=[],
+    per_message=True  # ✅ FIXED WARNING
 )
 
-# Separate handler for pagination
 pagination_handler = CallbackQueryHandler(pagination, pattern="^page_")
