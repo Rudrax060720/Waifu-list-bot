@@ -11,7 +11,7 @@ from telegram.ext import (
 
 from config import BOT_TOKEN, OWNER_ID
 from handlers.add_auto import add_character
-from from handlers.check import check_handler, pagination_handler ✅ ADD THIS
+from from handlers.check import check_handler, pagination_handler
 from handlers.admins import (
     add_admin_cmd,
     remove_admin_cmd,
