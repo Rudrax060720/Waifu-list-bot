@@ -11,6 +11,7 @@ from telegram.ext import (
 
 from config import BOT_TOKEN, OWNER_ID
 from handlers.add_auto import add_character
+from handlers.check import check_handler  # ✅ ADD THIS
 from handlers.admins import (
     add_admin_cmd,
     remove_admin_cmd,
@@ -43,7 +44,7 @@ def main():
     if not BOT_TOKEN:
         raise RuntimeError("BOT_TOKEN is not set")
 
-    # 🌐 Start ping server (Render)
+    # 🌐 Start ping server
     threading.Thread(target=run_ping_server, daemon=True).start()
 
     app = Application.builder().token(BOT_TOKEN).build()
@@ -53,10 +54,13 @@ def main():
 
     # ---------- Handlers ----------
 
-    # 📸 Image handler (FIXED filter)
+    # 📸 Photo + Caption ONLY (IMPORTANT FIX)
     app.add_handler(
-        MessageHandler(filters.PHOTO, add_character)
+        MessageHandler(filters.PHOTO & filters.Caption(True), add_character)
     )
+
+    # 🔎 Check command
+    app.add_handler(check_handler)
 
     # 👑 Admin commands
     app.add_handler(CommandHandler("addadmin", add_admin_cmd))
