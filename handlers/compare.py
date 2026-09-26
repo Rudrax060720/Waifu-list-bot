@@ -24,23 +24,22 @@ RARITY_MAP = {
     "🔵": "common",
 }
 
-RARITY_EMOJI = {v: k for k, v in RARITY_MAP.items()}
-
-
-# ---------- EVENT NORMALIZER (FIXED) ----------
+# ---------- EVENT NORMALIZER (FINAL FIX) ----------
 def normalize_event(event: str):
     if not event:
         return ""
 
-    event = event.strip()
-
-    # 🔥 FIX: normalize "None"
-    if event.lower() in ["none", "null", ""]:
-        return ""
-
+    # extract from [event]
     match = re.search(r"\[(.*?)\]", event)
     if match:
-        return match.group(1).strip()
+        val = match.group(1).strip()
+        return val if val else ""
+
+    event = event.strip().lower()
+
+    # 🔥 VERY IMPORTANT FIX
+    if event in ["none", "null", "-", ""]:
+        return ""
 
     return event
 
@@ -70,7 +69,7 @@ async def compare_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return ASK_TYPE
 
 
-# ---------- TYPE SELECT ----------
+# ---------- TYPE ----------
 async def select_type(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -82,7 +81,7 @@ async def select_type(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["count"] = 0
 
     msg = await query.edit_message_text(
-        "📥 Send your list (paste or one by one)\n\n📊 Progress: 0 items\n\n[✅ Done]",
+        "📥 Send your list\n\n📊 Progress: 0 items\n\n[✅ Done]",
         reply_markup=InlineKeyboardMarkup([
             [InlineKeyboardButton("✅ Done", callback_data="cmp_done")]
         ])
@@ -92,7 +91,7 @@ async def select_type(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return WAITING_LIST
 
 
-# ---------- COLLECT LIST ----------
+# ---------- COLLECT ----------
 async def collect_list(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text
 
@@ -109,7 +108,7 @@ async def collect_list(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 chat_id=update.effective_chat.id,
                 message_id=msg_id,
                 text=(
-                    "📥 Send your list (paste or one by one)\n\n"
+                    "📥 Send your list\n\n"
                     f"📊 Progress: {context.user_data['count']} items\n\n"
                     "[✅ Done]"
                 ),
@@ -128,12 +127,12 @@ async def done_list(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
 
-    await query.message.edit_text("⚙️ Comparing data...\n📊 Please wait...")
+    await query.message.edit_text("⚙️ Comparing...\n\nBuilding result live...")
 
     return await process_list(update, context)
 
 
-# ---------- PARSER ----------
+# ---------- PARSER (FIXED) ----------
 def parse_user_line(line: str):
     try:
         if "➥" not in line:
@@ -144,17 +143,22 @@ def parse_user_line(line: str):
         rarity_emoji = parts[1].strip()
         name_part = parts[2].strip()
 
-        name = name_part.split("[")[0].replace("x", "").strip()
+        # remove [event]
+        name_clean = re.sub(r"\[.*?\]", "", name_part)
 
-        event = ""
-        if "[" in name_part and "]" in name_part:
-            event = normalize_event(name_part)
+        # remove x<number>
+        name_clean = re.sub(r"x\d+", "", name_clean)
+
+        name = name_clean.strip()
+
+        event = normalize_event(name_part)
 
         return (
-            name.lower().strip(),
+            name.lower(),
             event,
             RARITY_MAP.get(rarity_emoji, "")
         )
+
     except:
         return None
 
@@ -169,19 +173,15 @@ async def process_list(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     status_msg = await context.bot.send_message(
         chat_id=chat_id,
-        text="⚙️ Comparing...\n📊 Building results..."
+        text="⚙️ Comparing...\n\nPreparing..."
     )
 
-    # ---------- USER SET (FIXED) ----------
+    # ---------- USER SET ----------
     user_set = set()
-
     for line in raw_lines:
         parsed = parse_user_line(line)
         if parsed:
-            name, event, _ = parsed
-
-            key = (name.strip(), normalize_event(event))
-            user_set.add(key)
+            user_set.add(parsed)
 
     # ---------- DB ----------
     db_chars = list(characters.find({
@@ -193,57 +193,81 @@ async def process_list(update: Update, context: ContextTypes.DEFAULT_TYPE):
     db_map = {}
 
     for c in db_chars:
-        name = c["name"].strip().lower()
         event = normalize_event(str(c.get("event", "")))
 
-        key = (name, event)
+        key = (
+            c["name"].lower(),
+            event,
+            c["rarity"]
+        )
 
         db_set.add(key)
         db_map[key] = c
 
-    # ---------- COMPARE ----------
-    missing_from_user = db_set - user_set
-    not_in_db = user_set - db_set
+    missing = sorted(db_set - user_set)
+    not_in_db = sorted(user_set - db_set)
 
-    # ---------- FORMAT ----------
-    text = f"📊 *{anime.title()} ({'Waifu' if type_=='w' else 'Husbando'})*\n\n"
+    # ---------- LIVE BUILD ----------
+    header = f"📊 *{anime.title()} ({'Waifu' if type_=='w' else 'Husbando'})*\n\n"
+    header += "❌ *Missing Characters:*\n"
 
-    text += "❌ *Missing Characters:*\n"
+    text = header
     id_list = []
 
-    for key in sorted(missing_from_user):
+    chunk_size = 8
+
+    for i, key in enumerate(missing, 1):
         char = db_map[key]
 
-        rarity_emoji = RARITY_EMOJI.get(char["rarity"], "⭐")
+        cid = char["char_id"]
+        name = char["name"]
         event = normalize_event(str(char.get("event", "")))
-        event_display = f"{event}" if event else ""
 
-        text += f"{char['char_id']} : {char['name']} {event_display}\n"
-        id_list.append(str(char["char_id"]))
+        event_display = f" {event}" if event else ""
 
+        text += f"{cid} : {name}{event_display}\n"
+        id_list.append(str(cid))
+
+        # 🔥 SAFE LIVE UPDATE
+        if i % chunk_size == 0:
+            try:
+                await context.bot.edit_message_text(
+                    chat_id=chat_id,
+                    message_id=status_msg.message_id,
+                    text=text,
+                    parse_mode="Markdown"
+                )
+            except:
+                pass
+
+    # ---------- FINAL APPEND ----------
     text += "\n⚠️ *Not in Bot Database:*\n"
 
-    for key in sorted(not_in_db):
-        name, event = key
-        event_display = f"{event}" if event else ""
-        text += f"{name} {event_display}\n"
+    for key in not_in_db:
+        name = key[0]
+        event = key[1]
+        event_display = f" {event}" if event else ""
+        text += f"{name}{event_display}\n"
 
-    # ---------- IDS ----------
     ids = " ".join(sorted(set(id_list)))
 
-    if ids:
-        text += "\n📋 *Missing IDs (Global DB):*\n"
-        text += f"`{ids}`"
-    else:
-        text += "\n📋 *Missing IDs:* None 🎉"
+    text += "\n📋 *Missing IDs (Global DB):*\n"
+    text += f"`{ids}`"
 
-    # ---------- FINAL ----------
-    await context.bot.edit_message_text(
-        chat_id=chat_id,
-        message_id=status_msg.message_id,
-        text=text,
-        parse_mode="Markdown"
-    )
+    # ---------- FINAL SEND ----------
+    try:
+        await context.bot.edit_message_text(
+            chat_id=chat_id,
+            message_id=status_msg.message_id,
+            text=text,
+            parse_mode="Markdown"
+        )
+    except:
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text=text,
+            parse_mode="Markdown"
+        )
 
     return ConversationHandler.END
 
@@ -261,4 +285,4 @@ compare_handler = ConversationHandler(
     fallbacks=[],
     per_chat=True,
     per_user=True,
-    )
+)
