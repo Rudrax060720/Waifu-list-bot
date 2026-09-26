@@ -13,7 +13,7 @@ from telegram.ext import (
 from config import BOT_TOKEN, OWNER_ID
 from handlers.add_auto import add_character
 from handlers.check import check_handler, pagination_handler
-from handlers.compare import compare_handler  # ✅ ADD THIS
+from handlers.compare import compare_handler
 from handlers.admins import (
     add_admin_cmd,
     remove_admin_cmd,
@@ -55,13 +55,15 @@ def main():
     # 🔐 ensure owner is admin
     add_admin(OWNER_ID)
 
-    # ---------- HANDLER ORDER ----------
+    # ==============================
+    # 🔥 IMPORTANT: ORDER FIXED
+    # ==============================
 
-    # 1️⃣ Conversation handlers FIRST
+    # 1️⃣ Conversation handlers (highest priority)
+    app.add_handler(compare_handler)
     app.add_handler(check_handler)
-    app.add_handler(compare_handler)  # ✅ ADD HERE
 
-    # 2️⃣ Callback handlers
+    # 2️⃣ CallbackQuery handlers that are NOT part of conversations
     app.add_handler(pagination_handler)
 
     # 3️⃣ Admin commands
@@ -73,14 +75,17 @@ def main():
     # 4️⃣ Inline mode
     app.add_handler(InlineQueryHandler(inline_query))
 
-    # 5️⃣ Media handler LAST
+    # 5️⃣ Media handler LAST (important)
     app.add_handler(
         MessageHandler(filters.PHOTO & filters.CAPTION, add_character)
     )
 
     print("✅ Bot running...")
 
-    app.run_polling(drop_pending_updates=True)
+    app.run_polling(
+        drop_pending_updates=True,
+        allowed_updates=Update.ALL_TYPES if hasattr(Update, "ALL_TYPES") else None
+    )
 
 
 if __name__ == "__main__":
