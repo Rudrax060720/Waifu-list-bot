@@ -31,11 +31,9 @@ RARITY_EMOJI = {v: k for k, v in RARITY_MAP.items()}
 def normalize_event(event: str):
     if not event:
         return ""
-
     match = re.search(r"\[(.*?)\]", event)
     if match:
         return match.group(1).strip()
-
     return event.strip()
 
 
@@ -92,6 +90,7 @@ async def select_type(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def collect_list(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text
 
+    # split pasted block into lines
     lines = text.split("\n")
 
     for line in lines:
@@ -129,6 +128,11 @@ async def done_list(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
 
+    # instant feedback
+    await query.message.edit_text(
+        "⚙️ Starting comparison...\n📊 Analyzing data..."
+    )
+
     return await process_list(update, context)
 
 
@@ -159,7 +163,7 @@ def parse_user_line(line: str):
         return None
 
 
-# ---------- PROCESS WITH PROGRESS BAR ----------
+# ---------- PROCESS (WITH FULL PROGRESS + PREP) ----------
 async def process_list(update: Update, context: ContextTypes.DEFAULT_TYPE):
     anime = context.user_data["anime"]
     type_ = context.user_data["type"]
@@ -167,20 +171,19 @@ async def process_list(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     chat_id = update.effective_chat.id
 
-    # 🔥 start progress message
     status_msg = await context.bot.send_message(
         chat_id=chat_id,
-        text="⚙️ Starting comparison...\n📊 Progress: 0%"
+        text="⚙️ Comparing characters...\n📊 Progress: 0%"
     )
 
+    # ---------- USER SET ----------
     user_set = set()
-
-    # build user set
     for line in raw_lines:
         parsed = parse_user_line(line)
         if parsed:
             user_set.add(parsed)
 
+    # ---------- DB ----------
     db_chars = list(characters.find({
         "anime": anime,
         "type": type_
@@ -191,7 +194,6 @@ async def process_list(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     total = len(db_chars)
 
-    # 🔥 progress comparison
     for i, c in enumerate(db_chars, 1):
         event = normalize_event(str(c.get("event", "")))
 
@@ -204,7 +206,8 @@ async def process_list(update: Update, context: ContextTypes.DEFAULT_TYPE):
         db_set.add(key)
         db_map[key] = c
 
-        if i % max(1, total // 10) == 0:
+        # progress update
+        if total > 0 and i % max(1, total // 10) == 0:
             percent = int((i / total) * 100)
 
             try:
@@ -216,29 +219,49 @@ async def process_list(update: Update, context: ContextTypes.DEFAULT_TYPE):
             except:
                 pass
 
-    missing_from_user = db_set - user_set
-    not_in_db = user_set - db_set
-
+    # ---------- PREP PHASE ----------
     await context.bot.edit_message_text(
         chat_id=chat_id,
         message_id=status_msg.message_id,
-        text="✅ Comparison complete!\n📦 Preparing results..."
+        text="📦 Preparing results...\n📊 Formatting: 0%"
     )
 
+    missing_from_user = db_set - user_set
+    not_in_db = user_set - db_set
+
+    # ---------- BUILD RESULT ----------
     text = f"📊 *{anime.title()} ({'Waifu' if type_=='w' else 'Husbando'})*\n\n"
+
+    step = 0
+    total_steps = 3
+
+    # STEP 1
+    step += 1
+    await context.bot.edit_message_text(
+        chat_id=chat_id,
+        message_id=status_msg.message_id,
+        text=f"📦 Preparing results...\n📊 Formatting: {int(step/total_steps*100)}%"
+    )
 
     text += "❌ *Missing Characters:*\n"
     id_list = []
 
     for key in sorted(missing_from_user):
         char = db_map[key]
-
         rarity_emoji = RARITY_EMOJI.get(char["rarity"], "⭐")
         event = normalize_event(str(char.get("event", "")))
         event_display = f"[{event}]" if event else ""
 
         text += f"{rarity_emoji} {char['name']} {event_display}\n"
         id_list.append(str(char["char_id"]))
+
+    # STEP 2
+    step += 1
+    await context.bot.edit_message_text(
+        chat_id=chat_id,
+        message_id=status_msg.message_id,
+        text=f"📦 Preparing results...\n📊 Formatting: {int(step/total_steps*100)}%"
+    )
 
     text += "\n⚠️ *Not in Bot Database:*\n"
 
@@ -248,10 +271,18 @@ async def process_list(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         text += f"{rarity_emoji} {key[0]} {event_display}\n"
 
-    text += "\n📋 *Missing IDs (Global DB):*\n"
-    ids = " ".join(sorted(set(id_list)))
-    text += f"`{ids}`"
+    # STEP 3
+    step += 1
+    await context.bot.edit_message_text(
+        chat_id=chat_id,
+        message_id=status_msg.message_id,
+        text=f"📦 Preparing results...\n📊 Formatting: {int(step/total_steps*100)}%"
+    )
 
+    text += "\n📋 *Missing IDs (Global DB):*\n"
+    text += f"`{' '.join(sorted(set(id_list)))}"`
+
+    # FINAL RESULT
     await context.bot.send_message(
         chat_id=chat_id,
         text=text,
@@ -274,4 +305,4 @@ compare_handler = ConversationHandler(
     fallbacks=[],
     per_chat=True,
     per_user=True,
-)
+    )
