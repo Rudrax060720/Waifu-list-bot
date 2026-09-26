@@ -6,14 +6,11 @@ from telegram.ext import (
     Application,
     MessageHandler,
     CommandHandler,
-    InlineQueryHandler,
-    filters
+    filters,
+    InlineQueryHandler
 )
 
 from config import BOT_TOKEN, OWNER_ID
-from db import add_admin
-
-# handlers
 from handlers.add_auto import add_character
 from handlers.check import check_handler, pagination_handler
 from handlers.admins import (
@@ -23,9 +20,10 @@ from handlers.admins import (
     check_admin
 )
 from handlers.inline import inline_query
+from db import add_admin
 
 
-# ---------- Ping Server (for Render) ----------
+# ---------- Ping Server ----------
 class PingHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
@@ -43,37 +41,34 @@ def run_ping_server():
     server.serve_forever()
 
 
-# ---------- Main Bot ----------
+# ---------- MAIN ----------
 def main():
     if not BOT_TOKEN:
         raise RuntimeError("BOT_TOKEN is not set")
 
-    # 🌐 Start ping server
     threading.Thread(target=run_ping_server, daemon=True).start()
 
     app = Application.builder().token(BOT_TOKEN).build()
 
-    # 🔐 Ensure OWNER is always admin
+    # ensure owner is admin
     add_admin(OWNER_ID)
 
-    # ---------- Handlers ----------
-
-    # 📸 Auto add (ONLY photo + caption)
+    # 📸 FIXED HANDLER
     app.add_handler(
-        MessageHandler(filters.PHOTO & filters.Caption(True), add_character)
+        MessageHandler(filters.PHOTO & filters.CAPTION, add_character)
     )
 
     # 🔎 Check system
     app.add_handler(check_handler)
     app.add_handler(pagination_handler)
 
-    # 👑 Admin commands
+    # 👑 Admins
     app.add_handler(CommandHandler("addadmin", add_admin_cmd))
     app.add_handler(CommandHandler("removeadmin", remove_admin_cmd))
     app.add_handler(CommandHandler("admins", list_admins))
     app.add_handler(CommandHandler("meadmin", check_admin))
 
-    # 🔍 Inline search (keep LAST)
+    # 🔍 Inline
     app.add_handler(InlineQueryHandler(inline_query))
 
     print("✅ Bot running...")
