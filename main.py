@@ -46,30 +46,35 @@ def main():
     if not BOT_TOKEN:
         raise RuntimeError("BOT_TOKEN is not set")
 
+    # 🌐 Render keepalive server
     threading.Thread(target=run_ping_server, daemon=True).start()
 
     app = Application.builder().token(BOT_TOKEN).build()
 
-    # ensure owner is admin
+    # 🔐 ensure owner is admin
     add_admin(OWNER_ID)
 
-    # 📸 FIXED HANDLER
-    app.add_handler(
-        MessageHandler(filters.PHOTO & filters.CAPTION, add_character)
-    )
+    # ---------- HANDLER ORDER (VERY IMPORTANT) ----------
 
-    # 🔎 Check system
+    # 1️⃣ Conversation FIRST (so it catches /check properly)
     app.add_handler(check_handler)
+
+    # 2️⃣ Pagination (callback queries)
     app.add_handler(pagination_handler)
 
-    # 👑 Admins
+    # 3️⃣ Admin commands
     app.add_handler(CommandHandler("addadmin", add_admin_cmd))
     app.add_handler(CommandHandler("removeadmin", remove_admin_cmd))
     app.add_handler(CommandHandler("admins", list_admins))
     app.add_handler(CommandHandler("meadmin", check_admin))
 
-    # 🔍 Inline
+    # 4️⃣ Inline mode
     app.add_handler(InlineQueryHandler(inline_query))
+
+    # 5️⃣ Photo handler LAST (so it doesn't override others)
+    app.add_handler(
+        MessageHandler(filters.PHOTO & filters.CAPTION, add_character)
+    )
 
     print("✅ Bot running...")
 
